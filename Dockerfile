@@ -1,36 +1,20 @@
-FROM alpine:latest
+FROM buildpack-deps:stretch-scm as build
 
 LABEL maintainer="austin@songer.pro"
 
-RUN apk add --no-cache \
-	ca-certificates 
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update && \
+    apt-get install -y \
+        build-essential \
+        clang \
+        libpcap-dev
+COPY . /masscan/
+WORKDIR /masscan
+RUN make -j
 
-RUN apk update \
-  && apk add --no-cache libcap \
-                        libpcap-dev \
-                        \
-  && apk add --no-cache --virtual .deps build-base \
-                                        linux-headers \
-                                        git \
-                                        clang \
-                                        clang-dev \
-                                        \
-  && git clone --depth=1 \
-               --branch=master \
-               https://github.com/robertdavidgraham/masscan.git \
-  && cd /masscan \
-  && make \
-  \
-  && apk del .deps \
-  && rm -rf /var/cache/apk/*
-
-RUN adduser -D scan \
-  && setcap cap_net_raw=eip /masscan/bin/masscan
-
-USER scan
-
-VOLUME /home/scan
-
-WORKDIR /home/scan
-
-ENTRYPOINT ["/masscan/bin/masscan"]
+FROM debian:stretch-slim
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y libpcap0.8 && \
+    rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/* /var/cache/apt/archives/*
+COPY --from=build /masscan/bin/masscan /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/masscan"]
