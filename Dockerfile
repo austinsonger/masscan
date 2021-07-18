@@ -3,26 +3,34 @@ FROM alpine:latest
 LABEL maintainer="austin@songer.pro"
 
 RUN apk add --no-cache \
-	ca-certificates \
-	libpcap-dev
+	ca-certificates 
 
-ENV MASSCAN_VERSION 1.0.5
+RUN apk update \
+  && apk add --no-cache libcap \
+                        libpcap-dev \
+                        \
+  && apk add --no-cache --virtual .deps build-base \
+                                        linux-headers \
+                                        git \
+                                        clang \
+                                        clang-dev \
+                                        \
+  && git clone --depth=1 \
+               --branch=master \
+               https://github.com/robertdavidgraham/masscan.git \
+  && cd /masscan \
+  && make \
+  \
+  && apk del .deps \
+  && rm -rf /var/cache/apk/*
 
-RUN set -x \
-	&& apk add --no-cache --virtual .build-deps \
-		build-base \
-		clang \
-		clang-dev \
-		git \
-		linux-headers \
-	&& rm -rf /var/lib/apt/lists/* \
-	&& git clone --depth 1 --branch "$MASSCAN_VERSION" https://github.com/robertdavidgraham/masscan.git /usr/src/masscan \
-	&& ( \
-	cd /usr/src/masscan \
-	&& make \
-	&& make install \
-	) \
-	&& rm -rf /usr/src/masscan \
-	&& apk del .build-deps
+RUN adduser -D scan \
+  && setcap cap_net_raw=eip /masscan/bin/masscan
 
-ENTRYPOINT [ "masscan" ]
+USER scan
+
+VOLUME /home/scan
+
+WORKDIR /home/scan
+
+ENTRYPOINT ["/masscan/bin/masscan"]
